@@ -1,0 +1,53 @@
+library(caret)
+library(ape)
+
+data = read.csv('results_separate.csv',header = TRUE,row.names = 1)
+code = read.csv('code.csv',header = TRUE)
+
+# 修改国家名
+cnt = row.names(data)
+row.names(code)=code$country_code
+name_data = code[cnt,]$name
+row.names(data)=name_data
+
+# 考虑缺失率
+calc = function(x){
+  num_na = sum(is.na(x))
+  len = length(x)
+  return(num_na/len)
+}
+
+rate = apply(data,2,calc)
+plot(rate)
+
+# 缺失值中位数填充
+medianImpute = preProcess(data,method = 'medianImpute')
+data = predict(medianImpute,data)
+
+# 去除无关变量/缺失变量
+data = subset(data,select = c(-ST004D01T1))
+data = subset(data,select = -c(RMSE,MAE,corr,ZlnCHINAGDP))
+
+# clustering
+out_dist = dist(data,method='euclidean')
+out_hclust = hclust(out_dist,method='complete')
+plot(out_hclust)
+
+mypal=c("#556270", "#4ECDC4", "#1B676B", "#FF6B6B", "#C44D58")
+clus5=cutree(out_hclust, 5)
+op=par(bg="#E8DDCB")
+plot(as.phylo(out_hclust), type="fan", tip.color=mypal[clus5], label.offset=1)
+plot(as.phylo(out_hclust), type = "fan")
+
+
+# knn聚类
+library(factoextra)
+library(ggplot2)
+set.seed(1234)
+fviz_nbclust(data, kmeans, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)
+km.res <- kmeans(data,3)
+knn_cluster <- km.res$cluster
+print(knn_cluster[knn_cluster==1])
+print(knn_cluster[knn_cluster==2])
+print(knn_cluster[knn_cluster==3])
