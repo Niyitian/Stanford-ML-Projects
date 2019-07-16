@@ -1,0 +1,69 @@
+library(caret)
+library(ape)
+library(tidyverse)
+load('names.RData')
+
+data = read.csv('results_separate common variable.csv',header = TRUE)
+countries_selected = data.frame(countries_selected)
+names(countries_selected)='CNTRYID'
+data = merge(data,countries_selected,by='CNTRYID')
+code = read.csv('code.csv',header = TRUE)
+
+# add name
+data = merge(data,code,by='CNTRYID')
+row.names(data) = data$name
+
+name_select1 = intersect(names(data),names_selected)
+name_select2 = setdiff(names_selected,names(data))
+
+data0 = data %>% select('CNTRYID',name_select1)
+for (i in 1:length(name_select2)) {
+  temp = data %>% select(starts_with(name_select2[i]))
+  data0 = cbind(data0,temp)
+}
+
+other_factor = read_csv('Country-level Analysis Passion and Science Mar 30 AL EDT.csv') %>%
+  select(CNTRYID, ZlnCHINAGDP, HDI)
+data = merge(other_factor,data0,by='CNTRYID')
+
+data = data0 %>% select(-'CNTRYID')
+
+# filter high NA rate
+calc = function(x){
+  num_na = sum(is.na(x))
+  len = length(x)
+  return(num_na/len)
+}
+rate = apply(data,1,calc)
+plot(rate)
+rate2 = apply(data,2,calc)
+plot(rate2)
+data = data[,rate2<0.1]
+
+scale = preProcess(data,method = 'scale')
+data = predict(scale,data)
+pre = preProcess(data,method = 'medianImpute')
+data = predict(pre,data)
+
+# clustering
+out_dist = dist(data,method='euclidean')
+out_hclust = hclust(out_dist,method='ward.D')
+plot(out_hclust)
+
+mypal=c("#556270", "#4ECDC4", "#FF6B6B","#C44D58","#1B676B", "#000099","#CC0000","#FF9999","#E69F00","#009E73")
+clus5=cutree(out_hclust, 5)
+plot(as.phylo(out_hclust), type="fan", tip.color=mypal[clus5],
+     label.offset=1)
+
+# groupby分析
+data$group = clus5[row.names(data)]
+a = by(data[,1], list(data$group), mean)
+for (i in 2:204) {
+  temp = by(data[,i], list(data$group), mean)
+  a = cbind(a,temp)
+}
+colnames(a) = colnames(data)[1:204]
+v = apply(a, 2, var)
+max_name = names(sort(v,decreasing = T))
+a = a[,max_name]
+write.csv(a,file = 'group analysis.csv')
